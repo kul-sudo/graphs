@@ -1,11 +1,29 @@
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
+use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, collections::HashSet, process::exit, time::Instant};
 
-#[derive(Debug)]
+const NODES_N: usize = 10;
+const EDGES_N: usize = 15;
+const GRAPHS_N: usize = 100_000;
+
+#[derive(Serialize, Deserialize)]
 struct Graph {
     nodes_n: usize,
     edges_n: usize,
     edges: Vec<Vec<bool>>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Info {
+    nodes_n: usize,
+    edges_n: usize,
+    graphs_n: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Content {
+    info: Info,
+    graphs: Vec<Vec<Vec<bool>>>,
 }
 
 impl Graph {
@@ -122,21 +140,55 @@ impl Graph {
     }
 }
 
-const N: usize = 10_000;
-
 fn main() {
     let mut rng = StdRng::from_rng(&mut rand::thread_rng()).unwrap();
 
-    let mut hamiltonian_n = 0;
+    //let mut hamiltonian_n = 0;
+
+    let mut hamiltonian_graphs = Vec::with_capacity(NODES_N);
+    let mut non_hamiltonian_graphs = Vec::with_capacity(EDGES_N);
 
     let start = Instant::now();
-    for _ in 0..N {
-        let mut graph = Graph::new(10, 15);
+
+    loop {
+        let mut graph = Graph::new(NODES_N, EDGES_N);
         graph.safety();
         graph.generate(&mut rng);
-        hamiltonian_n += graph.is_hamiltonian() as usize;
+
+        if graph.is_hamiltonian() {
+            if hamiltonian_graphs.len() < GRAPHS_N {
+                hamiltonian_graphs.push(graph.edges);
+            }
+        } else {
+            if non_hamiltonian_graphs.len() < GRAPHS_N {
+                non_hamiltonian_graphs.push(graph.edges);
+            }
+        }
+
+        if hamiltonian_graphs.len() == GRAPHS_N && non_hamiltonian_graphs.len() == GRAPHS_N {
+            break;
+        }
     }
 
-    println!("{:?}", start.elapsed().as_secs_f64());
-    println!("{:?}", hamiltonian_n as f64 / N as f64);
+    println!("{:?}", start.elapsed().as_secs_f32());
+
+    for (graphs, name) in [
+        (hamiltonian_graphs, "hamiltonian_graphs"),
+        (non_hamiltonian_graphs, "non_hamiltonian_graphs"),
+    ] {
+        let content = Content {
+            info: Info {
+                nodes_n: NODES_N,
+                edges_n: EDGES_N,
+                graphs_n: GRAPHS_N,
+            },
+            graphs: graphs.clone(),
+        };
+
+        std::fs::write(
+            format!("{}.json", name),
+            serde_json::to_string_pretty(&content).unwrap(),
+        )
+        .unwrap()
+    }
 }
