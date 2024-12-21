@@ -3,11 +3,11 @@ use macroquad::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{f32::consts::PI, process::exit, time::Instant};
 
-const NODES_N: usize = 12;
+const NODES_N: usize = 11;
 static MAX_EDGES_N: usize = (NODES_N * (NODES_N - 1)) / 2;
 static EDGES_THRESHOLD: usize = (MAX_EDGES_N as f32 * 0.5) as usize;
 
-const GRAPHS_N: usize = 500;
+const GRAPHS_N: usize = 100000;
 
 const GRAPH_RADIUS: f32 = 500.0;
 const NODE_RADIUS: f32 = 10.0;
@@ -34,6 +34,10 @@ struct Content {
 enum GraphKind {
     Hamiltonian,
     NonHamiltonian,
+}
+
+impl GraphKind {
+    const ALL: [Self; 2] = [Self::Hamiltonian, Self::NonHamiltonian];
 }
 
 impl Graph {
@@ -93,29 +97,31 @@ impl Graph {
         }
     }
 
-    fn generate_with_given_kind(&mut self, kind: GraphKind) {
+    fn generate_with_given_kind(&mut self, kind: GraphKind, improvements: bool) {
         loop {
             self.generate();
 
-            match kind {
-                GraphKind::Hamiltonian => {
-                    if self
-                        .edges
-                        .iter()
-                        .flatten()
-                        .map(|x| *x as usize)
-                        .sum::<usize>()
-                        / 2
-                        > EDGES_THRESHOLD
-                    {
-                        continue;
+            if improvements {
+                match kind {
+                    GraphKind::Hamiltonian => {
+                        if self
+                            .edges
+                            .iter()
+                            .flatten()
+                            .map(|x| *x as usize)
+                            .sum::<usize>()
+                            / 2
+                            > EDGES_THRESHOLD
+                        {
+                            continue;
+                        }
                     }
-                }
-                GraphKind::NonHamiltonian => {
-                    if (0..NODES_N)
-                        .any(|i| self.edges[i].iter().map(|x| *x as usize).sum::<usize>() < 2)
-                    {
-                        continue;
+                    GraphKind::NonHamiltonian => {
+                        if (0..NODES_N)
+                            .any(|i| self.edges[i].iter().map(|x| *x as usize).sum::<usize>() < 2)
+                        {
+                            continue;
+                        }
                     }
                 }
             }
@@ -133,7 +139,7 @@ enum Mode {
     Demonstration,
     Generation,
 }
-const MODE: Mode = Mode::Demonstration;
+const MODE: Mode = Mode::Generation;
 
 #[macroquad::main("BasicShapes")]
 async fn main() {
@@ -160,7 +166,7 @@ async fn main() {
 
             loop {
                 if is_key_pressed(KeyCode::R) {
-                    graph.generate_with_given_kind(kind);
+                    graph.generate_with_given_kind(kind, true);
 
                     kind = match kind {
                         GraphKind::Hamiltonian => GraphKind::NonHamiltonian,
@@ -207,22 +213,16 @@ async fn main() {
 
             let start = Instant::now();
 
-            loop {
-                let mut graph = Graph::new(NODES_N);
-                graph.safety();
-                graph.generate();
+            for kind in GraphKind::ALL {
+                for _ in 0..GRAPHS_N {
+                    let mut graph = Graph::new(NODES_N);
+                    graph.safety();
+                    graph.generate_with_given_kind(kind, true);
 
-                if !graph.get_cycle().is_empty() {
-                    if hamiltonian_graphs.len() < GRAPHS_N {
-                        hamiltonian_graphs.push(graph.edges);
+                    match kind {
+                        GraphKind::Hamiltonian => hamiltonian_graphs.push(graph.edges),
+                        GraphKind::NonHamiltonian => non_hamiltonian_graphs.push(graph.edges),
                     }
-                } else if non_hamiltonian_graphs.len() < GRAPHS_N {
-                    non_hamiltonian_graphs.push(graph.edges);
-                }
-
-                if hamiltonian_graphs.len() == GRAPHS_N && non_hamiltonian_graphs.len() == GRAPHS_N
-                {
-                    break;
                 }
             }
 
